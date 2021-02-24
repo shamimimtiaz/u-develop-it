@@ -1,5 +1,6 @@
 //connect to the SQLite database. it sets the execution mode to verbose to produce messages in the terminal regarding the state of the runtime.
 const sqlite3 = require('sqlite3').verbose();
+const { json } = require('express');
 //Open the server.js file and import express
 const express = require('express');
 const inputCheck = require('./utils/inputCheck');
@@ -12,31 +13,27 @@ app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
 //this code will connect the application to the SQLite database.
+// Connect to database 
 const db = new sqlite3.Database('./db/election.db', err => {
-    if (err) {
-      return console.error(err.message);
-    }
-  
-    console.log('Connected to the election database.');
-  });
+  if (err) {
+    return console.error(err.message);
+  }
 
+  console.log('Connected to the votes database.');
+});
 
-// app.get('/', (req, res) => {
-//     res.json({
-//       message: 'Hello World'
-//     });
-//   });
-
-// Get all candidates so that it's wrapped in an Express.js route
+//*************************************
+// ******** Candidate routes **********
+//*************************************
+// Get all candidates and their party affiliation
 app.get('/api/candidates', (req, res) => {
-  const sql = `SELECT candidates.*, parties.name 
-  AS party_name 
-  FROM candidates 
-  LEFT JOIN parties 
-  ON candidates.party_id = parties.id`;
-    const params = [];
-//this method executes the SQL command, the callback function captures the responses from the query in two variables: the err, which is the error response, and rows, which is the database query response.
-db.all(sql, params, (err, rows) => {
+  const sql =  `SELECT candidates.*, parties.name 
+                AS party_name 
+                FROM candidates 
+                LEFT JOIN parties 
+                ON candidates.party_id = parties.id`;
+  const params = [];
+  db.all(sql, params, (err, rows) => {
     if (err) {
       res.status(500).json({ error: err.message });
       return;
@@ -49,16 +46,16 @@ db.all(sql, params, (err, rows) => {
   });
 });
 
-// Rap this with express.js for get a single candidate
+// Get single candidate with party affliliation
 app.get('/api/candidate/:id', (req, res) => {
   const sql = `SELECT candidates.*, parties.name 
-  AS party_name 
-  FROM candidates 
-  LEFT JOIN parties 
-  ON candidates.party_id = parties.id 
-  WHERE candidates.id = ?`;
-//Here returning a single candidate from the candidates table based on their id.
-db.get(sql, params, (err, row) => {
+               AS party_name 
+               FROM candidates 
+               LEFT JOIN parties 
+               ON candidates.party_id = parties.id 
+               WHERE candidates.id = ?`;
+  const params = [req.params.id];
+  db.get(sql, params, (err, rows) => {
     if (err) {
       res.status(400).json({ error: err.message });
       return;
@@ -66,40 +63,24 @@ db.get(sql, params, (err, row) => {
 
     res.json({
       message: 'success',
-      data: row
-    });
-  });
-});
-
-// Delete a candidate and rap it with express.js
-app.delete('/api/candidate/:id', (req, res) => {
-    const sql = `DELETE FROM candidates WHERE id = ?`;
-    const params = [req.params.id];
-//Create query for delete a candidate
-db.run(sql, params, function(err, result) {
-    if (err) {
-      res.status(400).json({ error: res.message });
-      return;
-    }
-    res.json({
-      message: 'successfully deleted',
-      changes: this.changes
+      data: rows
     });
   });
 });
 
 // Create a candidate
 app.post('/api/candidate', ({ body }, res) => {
-    const errors = inputCheck(body, 'first_name', 'last_name', 'industry_connected');
-    if (errors) {
-      res.status(400).json({ error: errors });
-      return;
-    }
-//Create a candidate : create query for create operation
-const sql =  `INSERT INTO candidates (first_name, last_name, industry_connected) 
-                VALUES (?,?,?)`;
-  const params = [body.first_name, body.last_name, body.industry_connected];
-  // ES5 function, not arrow function, to use this
+  // Candidate is allowed not to be affiliated with a party
+  const errors = inputCheck(body, 'first_name', 'last_name', 'industry_connected');
+  if (errors) {
+    res.status(400).json({ error: errors });
+    return;
+  }
+
+  const sql =  `INSERT INTO candidates (first_name, last_name, industry_connected, party_id) 
+                VALUES (?,?,?,?)`;
+  const params = [body.first_name, body.last_name, body.industry_connected, body.party_id];
+  // function,not arrow, to use this
   db.run(sql, params, function(err, result) {
     if (err) {
       res.status(400).json({ error: err.message });
@@ -114,11 +95,104 @@ const sql =  `INSERT INTO candidates (first_name, last_name, industry_connected)
   });
 });
 
-//Default response for any other requests(Not Found) Catch all
-app.use((req, res) => {
-    res.status(404).end();
-  }); 
+// Update a candidate's party
+app.put('/api/candidate/:id', (req, res) => {
+// Candidate is allowed to not have party affiliation
+  const errors = inputCheck(req.body, 'party_id');
+  if (errors) {
+    res.status(400).json({ error: errors });
+    return;
+  }
 
+  const sql = `UPDATE candidates SET party_id = ? 
+               WHERE id = ?`;
+  const params = [req.body.party_id, req.params.id];
+  // function,not arrow, to use this
+  db.run(sql, params, function(err, result) {
+    if (err) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
+
+    res.json({
+      message: 'success',
+      data: req.body,
+      changes: this.changes
+    });
+  });
+});
+
+// Delete a candidate
+app.delete('/api/candidate/:id', (req, res) => {
+  const sql = `DELETE FROM candidates WHERE id = ?`;
+  const params = [req.params.id];
+  db.run(sql, params, function(err, result) {
+    if (err) {
+      res.status(400).json({ error: res.message });
+      return;
+    }
+
+    res.json({ message: 'successfully deleted', changes: this.changes });
+  });
+});
+
+//*************************************
+// *********** Party routes ***********
+//*************************************
+// Get all parties
+app.get('/api/parties', (req, res) => {
+  const sql = `SELECT * FROM parties`;
+  const params = [];
+  db.all(sql, params, (err, rows) => {
+    if (err) {
+      res.status(500).json({ error: err.message });
+      return;
+    }
+
+    res.json({
+      message: 'success',
+      data: rows
+    });
+  });
+});
+
+// Get single party
+app.get('/api/party/:id', (req, res) => {
+  const sql = `SELECT * FROM parties WHERE id = ?`;
+  const params = [req.params.id];
+  db.get(sql, params, (err, rows) => {
+    if (err) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
+
+    res.json({
+      message: 'success',
+      data: rows
+    });
+  });
+});
+
+// Delete a party
+app.delete('/api/party/:id', (req, res) => {
+  const sql = `DELETE FROM parties WHERE id = ?`;
+  const params = [req.params.id]
+  db.run(sql, params, function(err, result) {
+    if (err) {
+      res.status(400).json({ error: res.message });
+      return;
+    }
+
+    res.json({ message: 'successfully deleted', changes: this.changes });
+  });
+});
+
+// Default response for any other request(Not Found) Catch all other
+app.use((req, res) => {
+  res.status(404).end();
+});
+
+// Start server after DB connection
 //To ensure that the Express.js server doesn't start before the connection to the database has been established, let's wrap the Express.js server connection located at the bottom of the server.js file in an event handler
 db.on('open', () => {
 //add the function that will start the Express.js server on port 3001.
@@ -126,3 +200,10 @@ db.on('open', () => {
         console.log(`Server running on port ${PORT}`);
     });
 });
+
+
+
+
+//Assuming that you want to join an items table with a categories table, which SQL statement is correct?
+//SELECT * FROM items
+//LEFT JOIN categories ON items.category_id = categories.id;
