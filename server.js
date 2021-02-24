@@ -29,7 +29,11 @@ const db = new sqlite3.Database('./db/election.db', err => {
 
 // Get all candidates so that it's wrapped in an Express.js route
 app.get('/api/candidates', (req, res) => {
-    const sql =  `SELECT * FROM candidates`;
+  const sql = `SELECT candidates.*, parties.name 
+  AS party_name 
+  FROM candidates 
+  LEFT JOIN parties 
+  ON candidates.party_id = parties.id`;
     const params = [];
 //this method executes the SQL command, the callback function captures the responses from the query in two variables: the err, which is the error response, and rows, which is the database query response.
 db.all(sql, params, (err, rows) => {
@@ -47,9 +51,12 @@ db.all(sql, params, (err, rows) => {
 
 // Rap this with express.js for get a single candidate
 app.get('/api/candidate/:id', (req, res) => {
-    const sql = `SELECT * FROM candidates 
-                 WHERE id = ?`;
-    const params = [req.params.id];
+  const sql = `SELECT candidates.*, parties.name 
+  AS party_name 
+  FROM candidates 
+  LEFT JOIN parties 
+  ON candidates.party_id = parties.id 
+  WHERE candidates.id = ?`;
 //Here returning a single candidate from the candidates table based on their id.
 db.get(sql, params, (err, row) => {
     if (err) {
