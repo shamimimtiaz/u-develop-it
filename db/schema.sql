@@ -1,6 +1,8 @@
 /*This will drop/delete the tables every time you run the migration script, thus ensuring you're starting with a clean slate.*/
+-- to track down when parties/candidates/voters registered
 DROP TABLE IF EXISTS parties;
 DROP TABLE IF EXISTS candidates;
+DROP TABLE IF EXISTS voters;
 
 
 CREATE TABLE parties (
@@ -21,3 +23,13 @@ it references the id field in the parties table. This ensures that no id can be 
 if a party is deleted we added ON DELETE SET NULL to tell SQL to set a candidate's party_id field to NULL if the corresponding row in parties is ever deleted.*/
 
 );
+
+CREATE TABLE voters (
+  id INTEGER PRIMARY KEY,
+  first_name VARCHAR(30) NOT NULL,
+  last_name VARCHAR(30) NOT NULL,
+  email VARCHAR(50) NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+
